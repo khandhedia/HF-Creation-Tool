@@ -1,6 +1,6 @@
 package com.rnd.hftool.utilities;
 
-import com.rnd.hftool.dto.JarRecord;
+import com.rnd.hftool.dto.JarRecordDTO;
 import org.apache.log4j.Logger;
 
 import java.io.BufferedInputStream;
@@ -9,12 +9,15 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
-import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+
+import static java.util.jar.Attributes.Name.MANIFEST_VERSION;
+import static org.apache.commons.lang3.StringUtils.replaceChars;
+import static org.apache.log4j.Logger.getLogger;
 
 /**
  * Created by nirk0816 on 5/26/2017.
@@ -22,55 +25,52 @@ import java.util.zip.ZipOutputStream;
 public class JarUtilities
 {
 
-    private boolean debugMode;
+    private final boolean debugMode;
 
     public JarUtilities(boolean debugMode)
     {
         this.debugMode = debugMode;
     }
 
-    private final static Logger log = Logger.getLogger(JarUtilities.class);
+    private final static Logger log = getLogger(JarUtilities.class);
 
-    public File createJar(String jarPath, List<JarRecord> jarRecords) throws IOException
+    public File createJar(String jarPath, List<JarRecordDTO> jarRecordDTOS) throws IOException
     {
         Manifest manifest = new Manifest();
-        manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
+        manifest.getMainAttributes().put(MANIFEST_VERSION, "1.0");
 
         File jarFile = new File(jarPath);
         FileOutputStream fileOutputStream = new FileOutputStream(jarFile);
-        JarOutputStream jar = new JarOutputStream(fileOutputStream, manifest);
-        try
+        try (JarOutputStream jar = new JarOutputStream(fileOutputStream, manifest))
         {
-            addMultipleFilesToJar(jarRecords, jar);
-        }
-        finally
-        {
-            jar.close();
+            addMultipleFilesToJar(jarRecordDTOS, jar);
         }
 
         return jarFile;
     }
 
-    private void addMultipleFilesToJar(List<JarRecord> jarRecords, JarOutputStream jar)
+    private void addMultipleFilesToJar(List<JarRecordDTO> jarRecordDTOS, JarOutputStream jar)
     {
-        jarRecords.stream().forEach(jarRecord -> {
-            try
-            {
-                addSingleFileToJar(jar, jarRecord);
-            }
-            catch (IOException e)
-            {
-                if (debugMode) { e.printStackTrace(); }
-                log.error("Error adding " + jarRecord + " in jar: " + e.getMessage());
-            }
-        });
+        jarRecordDTOS.forEach(jarRecordDTO ->
+                              {
+                                  try
+                                  {
+                                      addSingleFileToJar(jar, jarRecordDTO);
+                                  }
+                                  catch (IOException e)
+                                  {
+                                      if (debugMode) { e.printStackTrace(); }
+                                      log.error("Error adding " + jarRecordDTO + " in jar: " + e.getMessage());
+                                  }
+                              });
     }
 
-    private void addSingleFileToJar(JarOutputStream jar, JarRecord jarRecord) throws IOException
+    private void addSingleFileToJar(JarOutputStream jar, JarRecordDTO jarRecordDTO) throws IOException
     {
 
-        File sourceFile = jarRecord.getSourceFile();
-        String filePathWithinJar = jarRecord.getFilePathWithinJar();
+        File sourceFile = jarRecordDTO.getSourceFile();
+        String filePathWithinJar = jarRecordDTO.getFilePathWithinJar().replace("\\","/");
+        filePathWithinJar = replaceChars( filePathWithinJar, "\\", "/");
 
         BufferedInputStream in = null;
         try

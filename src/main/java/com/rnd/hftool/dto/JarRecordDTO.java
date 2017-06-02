@@ -5,11 +5,11 @@ import java.io.File;
 /**
  * Created by nirk0816 on 5/29/2017.
  */
-public class JarRecord
+public class JarRecordDTO
 {
-    File sourceFile;
+    private File sourceFile;
 
-    String filePathWithinJar;
+    private String filePathWithinJar;
 
     public File getSourceFile()
     {
@@ -34,7 +34,7 @@ public class JarRecord
     @Override
     public String toString()
     {
-        final StringBuilder sb = new StringBuilder("JarRecord{");
+        final StringBuilder sb = new StringBuilder("JarRecordDTO{");
         sb.append("sourceFile=").append(sourceFile);
         sb.append(", filePathWithinJar='").append(filePathWithinJar).append('\'');
         sb.append('}');

@@ -5,11 +5,10 @@ package com.rnd.hftool.enums;
  */
 public enum FileTokens
 {
-
-    MODULE("module"),
-    BASE("base"),
-    COMPONENT("component"),
-    UNKNOWN("unknown");
+    TOKEN_MODULE("Module"),
+    TOKEN_BASE("Base"),
+    TOKEN_COMPONENT("Component"),
+    UNKNOWN("Unknown");
 
     String token;
 
@@ -25,14 +24,11 @@ public enum FileTokens
 
     public static FileTokens createToken(String token)
     {
-        if(token.equalsIgnoreCase("module"))
-            return FileTokens.MODULE;
-        else if(token.equalsIgnoreCase("base"))
-            return FileTokens.BASE;
-        else if(token.equalsIgnoreCase("component"))
-            return FileTokens.COMPONENT;
-        else
-            return FileTokens.UNKNOWN;
+        if (token.equalsIgnoreCase("module")) { return TOKEN_MODULE; }
+        else if (token.equalsIgnoreCase("base")) { return TOKEN_BASE; }
+        else if (token.equalsIgnoreCase("component")) { return TOKEN_COMPONENT; }
+        else { return UNKNOWN; }
     }
+
 
 }

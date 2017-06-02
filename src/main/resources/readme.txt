@@ -24,7 +24,8 @@ Contents:
 ********************************* Additional customizations ****************************************
 
 1. By default, the utility is running with INFO logging level.
-   To change the logging mode, open the jar file and edit log4j.properties - 'log4j.rootLogger=INFO, stdout, file'
+   To change the logging mode, edit the .bat file and provide System Property -Dlog.level.
+   Example, -Dlog.level=DEBUG, -Dlog.level=ERROR
 
 2. By default, the input file is expected to be present in same directory where the jar file resides, and has name "inputfile.txt".
    To use the input file stored at some different location, please provide the fully qualified path of the file in Unix Format (using / delimiter) or Windows Format (using \\ delimiter)  in the .bat file.
@@ -66,6 +67,10 @@ Contents:
 9. The zip file containing all created jars will be placed in the same directory from where HFTool is triggered.
 
 10. 'base' refers to the exact parent directory of the base package of the class/file to be packed.
+
+11. To provide more flexibility, the tool can be placed at any physical location and the "Location of HF Tool:" can be passed as the system property in .bat file.
+  -Dcurrent.path=The fully qualified path of the file in Unix Format (using / delimiter) or Windows Format (using \\ delimiter)
+  If this system property is not specified, the current path is considered as the location of the physical location of the tool itself.
 
 ************************************* Example configuration ****************************************
 

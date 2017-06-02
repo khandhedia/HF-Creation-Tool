@@ -1,8 +1,9 @@
 package com.rnd.hftool.application;
 
-import com.rnd.hftool.dto.JarRecord;
-import com.rnd.hftool.enums.ArtifactType;
-import com.rnd.hftool.enums.FileTokens;
+import com.rnd.hftool.dto.InputFileDTO;
+import com.rnd.hftool.dto.InputFileRecordDTO;
+import com.rnd.hftool.dto.JarRecordDTO;
+import com.rnd.hftool.enums.InputRecordType;
 import com.rnd.hftool.utilities.JarUtilities;
 import com.rnd.hftool.utilities.SearchUtilities;
 import org.apache.commons.lang3.StringUtils;
@@ -20,270 +21,235 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Scanner;
 import java.util.stream.Collectors;
 
 import static com.rnd.hftool.enums.ArtifactType.CLASS_FILE;
-import static com.rnd.hftool.enums.FileTokens.createToken;
+import static com.rnd.hftool.enums.ArtifactType.DIRECTORY;
+import static com.rnd.hftool.enums.ArtifactType.REGULAR_FILE;
+import static com.rnd.hftool.enums.InputRecordType.BLANK;
+import static com.rnd.hftool.enums.InputRecordType.ERRONEOUS;
 import static java.lang.System.currentTimeMillis;
 import static org.apache.commons.collections.CollectionUtils.isEmpty;
 import static org.apache.commons.collections.CollectionUtils.isNotEmpty;
 import static org.apache.commons.lang3.StringUtils.contains;
 import static org.apache.commons.lang3.StringUtils.endsWithIgnoreCase;
-import static org.apache.commons.lang3.StringUtils.isEmpty;
 import static org.apache.commons.lang3.StringUtils.substringAfterLast;
 import static org.apache.commons.lang3.StringUtils.substringBeforeLast;
+import static org.apache.log4j.Logger.getLogger;
 
 /**
  * Created by nirk0816 on 5/26/2017.
  */
 public class CreateHF
 {
-    private static final String DELIMITER = "=";
-    private final static Logger log = Logger.getLogger(CreateHF.class);
+    private final static Logger log = getLogger(CreateHF.class);
+
     private Map<Path, File> moduleJarMap;
-    private Map<Path, List<JarRecord>> moduleJarRecordsMap;
+    private Map<Path, List<JarRecordDTO>> moduleJarRecordsMap;
     private Path componentPath = null;
     private Path modulePath = null;
     private Path currentPath = null;
     private Path basePath = null;
     private JarUtilities jarUtilities;
     private SearchUtilities searchUtilities;
-    private int lineCounter;
     private SimpleDateFormat simpleDateFormat;
-    private boolean debugMode;
+    private final boolean debugMode;
 
-    public CreateHF(boolean debugMode)
+    public CreateHF(boolean debugMode, Path currentPath)
     {
         this.debugMode = debugMode;
+        this.currentPath = currentPath;
+        this.componentPath = currentPath;
+        this.modulePath = currentPath;
+        this.basePath = currentPath;
     }
 
-    public void createHF(Path currentPath, File inputFile) throws IOException
+    public void createHF(InputFileDTO inputFileDTO) throws IOException
     {
-        Date startDate = new Date(System.currentTimeMillis());
-        log.info("Create HF : STARTED - Input file " + inputFile.getAbsolutePath());
+        Date startDate = new Date(currentTimeMillis());
+        log.info("Create HF : STARTED");
 
-        init(currentPath);
-        processInputFile(inputFile);
-        packJars();
-        printJarPaths();
-        createZip();
+        if (null == inputFileDTO)
+        {
+            String message = "Create HF: Input Parsed File object is NULL";
+            log.error(message);
 
-        Date endDate = new Date(System.currentTimeMillis());
+            Date endDate = new Date(currentTimeMillis());
+            long timeDiffInMillis = endDate.getTime() - startDate.getTime();
+            log.error("Create HF: FAILED - Total time taken in milliseconds : " + timeDiffInMillis + "\n\n");
+            throw new RuntimeException(message);
+        }
+
+        try
+        {
+            init();
+            process(inputFileDTO);
+            packJars();
+            printJarPaths();
+            createZip();
+        }
+        catch (RuntimeException e)
+        {
+            Date endDate = new Date(currentTimeMillis());
+            long timeDiffInMillis = endDate.getTime() - startDate.getTime();
+            log.error("Create HF: FAILED - Total time taken in milliseconds : " + timeDiffInMillis + "\n\n");
+            throw e;
+        }
+
+        Date endDate = new Date(currentTimeMillis());
         long timeDiffInMillis = endDate.getTime() - startDate.getTime();
 
-        log.info("Create HF : COMPLETED - Total time taken in milliseconds : " + timeDiffInMillis+"\n\n\n\n");
+        log.info("Create HF : COMPLETED - Total time taken in milliseconds : " + timeDiffInMillis + "\n\n");
 
+        logWarning();
+    }
+
+    private void logWarning()
+    {
         log.info("Before delivering/deploying the hotfix, double-check that:");
-        log.info("1. The printed log doesn't have any ERROR/WARN records. If any, check/correct the Input file as required.");
+        log.info("1. The printed log doesn't have any ERROR/WARN records. If any, check/correct the Input file, if required and re-create the HF.");
         log.info("2. The content included in ZIP/JAR is exactly what was intended and nothing more/less/different is packed.");
         log.info("3. The content included is JAR is packed at correct path.");
         log.info("Happy HotFixing!!\n\n");
     }
 
-    private void init(Path currentPath)
+    private void init()
     {
-        this.currentPath = currentPath;
-        this.componentPath = currentPath;
-        this.modulePath = currentPath;
-        this.basePath = currentPath;
         this.simpleDateFormat = new SimpleDateFormat("yyyyMMddHHmmss");
         this.simpleDateFormat.setTimeZone(Calendar.getInstance().getTimeZone());
         this.jarUtilities = new JarUtilities(true);
         this.searchUtilities = new SearchUtilities(true);
-        this.lineCounter = 0;
         this.moduleJarMap = new HashMap<>();
         this.moduleJarRecordsMap = new HashMap<>();
     }
 
-    private void processInputFile(File inputFile) throws IOException
+    private void process(InputFileDTO inputFileDTO)
     {
-        Scanner scanner = new Scanner(inputFile);
-        while (scanner.hasNextLine()) { processLine(scanner.nextLine().trim()); }
+        inputFileDTO.getInputRecords().stream().filter(this::isValidRecord).forEach(this::processBasedOnInputRecordType);
     }
 
-    private void processLine(String line) throws IOException
+    private boolean isValidRecord(InputFileRecordDTO inputFileRecordDTO)
     {
-        //Increment line counter
-        lineCounter++;
+        InputRecordType inputRecordType = inputFileRecordDTO.getInputRecordType();
+        return !(inputRecordType == BLANK || inputRecordType == ERRONEOUS);
+    }
 
-        //Empty Lines Ignored
-        if (isEmpty(line))
+    private void processBasedOnInputRecordType(InputFileRecordDTO inputFileRecordDTO)
+    {
+        switch (inputFileRecordDTO.getInputRecordType())
         {
-            log.info("Line " + lineCounter + ": Blank. SKIPPED.");
-            return;
-        }
-
-        //If line contains delimiter, it needs further checks
-        if (contains(line, DELIMITER))
-        {
-            //Configure Scanner
-            Scanner scanner = new Scanner(line);
-            scanner.useDelimiter(DELIMITER);
-
-            //Extract token
-            String token = scanner.hasNext()
-                           ? scanner.next()
-                           : null;
-            if (null == token)
-            {
-                log.info("Line " + lineCounter + ": Contains delimiter '"+DELIMITER+"' without any token preceding it. SKIPPED.");
-                return;
-            }
-
-            //Extract value
-            String value = scanner.hasNext()
-                           ? scanner.next().trim()
-                           : null;
-            if (null == value)
-            {
-                log.info("Line " + lineCounter + ": Contains delimiter '"+DELIMITER+"' without any value following it. SKIPPED.");
-                return;
-            }
-
-            log.info("Line " + lineCounter + ": Processing.");
-
-            //Act based on token
-            switch (createToken(token))
-            {
-                case COMPONENT:
-                    setComponentPath(value);
-                    break;
-                case MODULE:
-                    setModulePath(value);
-                    break;
-                case BASE:
-                    setBasePath(value);
-                    break;
-                case UNKNOWN:
-                default:
-                    log.error(
-                            "Line " + lineCounter + ": Token '" + token + "' value is INVALID. Valid values: " + FileTokens.MODULE + " or " + FileTokens.BASE);
-            }
-
-        }
-        //else it is assumed to be a class file or regular file
-        else
-        {
-            if (isClassFile(line)) { searchAndPackClassFile(line); }
-            else { searchAndPackRegularFile(line); }
+            case COMPONENT:
+                setComponentPath(inputFileRecordDTO);
+                break;
+            case MODULE:
+                setModulePath(inputFileRecordDTO);
+                break;
+            case BASEPACKAGE:
+                setBasePath(inputFileRecordDTO);
+                break;
+            case REGULARFILE:
+                searchAndPrepareRegularFileForPacking(inputFileRecordDTO);
+                break;
+            case CLASSFILE:
+                searchAndPrepareClassFileForPacking(inputFileRecordDTO);
+                break;
         }
     }
 
-
-    private void setComponentPath(String componentName)
+    private void setComponentPath(InputFileRecordDTO inputFileRecordDTO)
     {
-        log.debug("Line " + lineCounter + ": Component: " + quote(componentName));
+        String componentName = inputFileRecordDTO.getValue();
+        int lineCounter = inputFileRecordDTO.getLineCounter();
+        InputRecordType inputRecordType = inputFileRecordDTO.getInputRecordType();
+
+        log.debug("Line " + lineCounter + ": " + inputRecordType + ": " + quote(componentName));
 
         //Search Component Directory by Name, starting from the Current Path (Directory from where the tool is run)
-        List<Path> localComponentPath = searchUtilities.search(currentPath, componentName, ArtifactType.DIRECTORY);
-
-        //If search result is NULL, throw RTException
-        if (null == localComponentPath)
-        {
-            String msg = "Component " + componentName + " could not be found under " + currentPath;
-            log.error("Line " + lineCounter + ": Component: " + quote(componentName) + " - Error: " + msg);
-            throw new RuntimeException(msg);
-        }
-
+        List<Path> localComponentPath = searchUtilities.search(currentPath, componentName, DIRECTORY);
+        //If search result is EMPTY, throw RTException
+        if (isEmpty(localComponentPath)) { errorNoPathFound(inputRecordType, componentName, lineCounter, currentPath); }
         //If search returns multiple locations, choose the nearest location (having minimum number of path delimiter /)
-        if (localComponentPath.size() > 1)
-        {
-            log.warn("Line " + lineCounter + ": Component: " + quote(componentName) + " - Found at multiple places:");
-            localComponentPath.forEach(path -> log.warn(path));
-            componentPath = localComponentPath.stream().sorted(Comparator.comparingInt(o -> StringUtils.countMatches(o.toString(), "/"))).findFirst().get();
-            log.warn("Line " + lineCounter + ": Component: " + quote(componentName) + " - Considering path: " + componentPath);
-        }
-
+        if (localComponentPath.size() > 1) { componentPath = warnMultiplePathsFound(inputRecordType, componentName, lineCounter, localComponentPath); }
         //If search returns exactly ONE result, set it as class level componentPath.
-        else if (localComponentPath.size() == 1)
-        {
-            componentPath = localComponentPath.get(0);
-            log.debug("Line " + lineCounter + ": Component: " + quote(componentName) + " - Considering path: " + componentPath);
-        }
+        else if (localComponentPath.size() == 1) { componentPath = informConsideredPath(inputRecordType, componentName, lineCounter, localComponentPath); }
     }
 
-    private void setModulePath(String moduleName)
+
+    private void setModulePath(InputFileRecordDTO inputFileRecordDTO)
     {
-        log.debug("Line " + lineCounter + ": Module: " + quote(moduleName));
+        String moduleName = inputFileRecordDTO.getValue();
+        int lineCounter = inputFileRecordDTO.getLineCounter();
+        InputRecordType inputRecordType = inputFileRecordDTO.getInputRecordType();
+
+        log.debug("Line " + lineCounter + ": " + inputRecordType + ": " + quote(moduleName));
 
         //Search Module Directory by Name, starting from Component Path
-        List<Path> localModulePath = searchUtilities.search(componentPath, moduleName, ArtifactType.DIRECTORY);
-
-        //If search result is NULL, throw RTException
-        if (null == localModulePath)
-        {
-            String msg = "Module " + moduleName + " could not be found under " + componentPath;
-            log.error("Line " + lineCounter + ": Module: " + quote(moduleName) + " - Error: " + msg);
-            throw new RuntimeException(msg);
-        }
-
+        List<Path> localModulePath = searchUtilities.search(componentPath, moduleName, DIRECTORY);
+        //If search result is EMPTY, throw RTException
+        if (isEmpty(localModulePath)) { errorNoPathFound(inputRecordType, moduleName, lineCounter, componentPath); }
         //If search returns multiple locations, choose the nearest location (having minimum number of path delimiter /)
-        if (localModulePath.size() > 1)
-        {
-            log.warn("Line " + lineCounter + ": Module: " + quote(moduleName) + " - Found at multiple places:");
-            localModulePath.forEach(path -> log.warn(path));
-            modulePath = localModulePath.stream().sorted(Comparator.comparingInt(o -> StringUtils.countMatches(o.toString(), "/"))).findFirst().get();
-            log.warn("Line " + lineCounter + ": Module: " + quote(moduleName) + " - Considering path: " + modulePath);
-
-        }
-
+        if (localModulePath.size() > 1) { modulePath = warnMultiplePathsFound(inputRecordType, moduleName, lineCounter, localModulePath ); }
         //If search returns exactly ONE result, set it as class level modulePath.
-        else if (localModulePath.size() == 1)
-        {
-            modulePath = localModulePath.get(0);
-            log.debug("Line " + lineCounter + ": Module: " + quote(moduleName) + " - Considering path: " + modulePath);
-        }
+        else if (localModulePath.size() == 1) { modulePath = informConsideredPath(inputRecordType, moduleName, lineCounter, localModulePath); }
     }
 
-    private void setBasePath(String basePackage)
+    private void setBasePath(InputFileRecordDTO inputFileRecordDTO)
     {
-        log.debug("Line " + lineCounter + ": Base Package: " + quote(basePackage));
+        String basePackageName = inputFileRecordDTO.getValue();
+        int lineCounter = inputFileRecordDTO.getLineCounter();
+        InputRecordType inputRecordType = inputFileRecordDTO.getInputRecordType();
+
+        log.debug("Line " + lineCounter + ": " + inputRecordType + ": " + quote(basePackageName));
 
         //Search Base Directory by Name, starting from Module Path
-        List<Path> localPackagePath = searchUtilities.search(modulePath, basePackage, ArtifactType.DIRECTORY);
-
-        //If search result is NULL, throw RTException
-        if (null == localPackagePath)
-        {
-            String msg = "Base package " + basePackage + " could not be found under " + modulePath;
-            log.error("Line " + lineCounter + ": Base Package: " + quote(basePackage) + " - Error: " + msg);
-            throw new RuntimeException(msg);
-        }
-
+        List<Path> localPackagePath = searchUtilities.search(modulePath, basePackageName, DIRECTORY);
+        //If search result is EMPTY, throw RTException
+        if (isEmpty(localPackagePath)) { errorNoPathFound(inputRecordType, basePackageName, lineCounter, modulePath); }
         //If search returns multiple locations, throw RTException
-        if (localPackagePath.size() > 1)
-        {
-            log.warn("Line " + lineCounter + ": Base Package: " + quote(basePackage) + " - Found at multiple places:");
-            localPackagePath.forEach(path -> log.warn(path));
-            basePath = localPackagePath.stream().sorted(Comparator.comparingInt(o -> StringUtils.countMatches(o.toString(), "/"))).findFirst().get();
-            log.warn("Line " + lineCounter + ": Base Package: " + quote(basePackage) + " - Considering path: " + basePath);
-        }
-
+        if (localPackagePath.size() > 1) { basePath = warnMultiplePathsFound(inputRecordType, basePackageName, lineCounter, localPackagePath); }
         //If search returns exactly ONE result, set it as class level basePath.
-        else if (localPackagePath.size() == 1)
-        {
-            basePath = localPackagePath.get(0);
-            log.debug("Line " + lineCounter + ": Base Package: " + quote(basePackage) + " - Considering path: " + basePath);
-        }
+        else if (localPackagePath.size() == 1) { basePath = informConsideredPath(inputRecordType, basePackageName, lineCounter, localPackagePath ); }
     }
 
-
-    private boolean isClassFile(String line)
+    private void errorNoPathFound(InputRecordType inputRecordType, String recordName, int lineCounter, Path searchPath)
     {
-        return endsWithIgnoreCase(line, ".class") || endsWithIgnoreCase(line, ".java");
+        String msg = inputRecordType + " " + recordName + " could not be found under " + searchPath;
+        log.error("Line " + lineCounter + ": " + inputRecordType + ": " + quote(recordName) + " - Error: " + msg);
+        throw new RuntimeException(msg);
     }
 
-    private void searchAndPackClassFile(String line) throws IOException
+    private Path warnMultiplePathsFound(InputRecordType inputRecordType, String recordName, int lineCounter, List<Path> foundPaths)
+    {
+        log.warn("Line " + lineCounter + ": " + inputRecordType + ": " + quote(recordName) + " - Found at multiple places:");
+        foundPaths.forEach(log::warn);
+        Path path = foundPaths.stream().sorted(sortInNearestPathOrder()).findFirst().get();
+        log.warn("Line " + lineCounter + ": " + inputRecordType + ": " + quote(recordName) + " - Considering nearest path: " + path);
+        return path;
+    }
+
+    private Path informConsideredPath(InputRecordType inputRecordType, String recordName, int lineCounter, List<Path> foundPaths)
+    {
+        Path path = foundPaths.get(0);
+        log.debug("Line " + lineCounter + ": " + inputRecordType + ": " + quote(recordName) + " - Considering path: " + path);
+        return path;
+    }
+
+    private Comparator<Path> sortInNearestPathOrder()
+    {
+        return Comparator.comparingInt(o -> StringUtils.countMatches(StringUtils.replaceChars(o.toString(), "\\", "/"), "/"));
+    }
+
+    private void searchAndPrepareClassFileForPacking(InputFileRecordDTO inputFileRecordDTO)
     {
         List<Path> pathList;
 
+        String line = inputFileRecordDTO.getLine();
         line = removeJavaOrClassExtension(line);
 
-        if (contains(line, ".")) { pathList = getPathFromFullyQualifiedName(line); }
+        if (contains(line, ".")) { pathList = getPathFromFullyQualifiedName(line, inputFileRecordDTO.getLineCounter()); }
         else { pathList = searchUtilities.search(basePath, line, CLASS_FILE); }
 
-        scheduleForAddingInJar(line, pathList);
+        scheduleForAddingInJar(line, inputFileRecordDTO.getLineCounter(), pathList);
     }
 
     private String removeJavaOrClassExtension(String line)
@@ -292,28 +258,30 @@ public class CreateHF
         return line;
     }
 
-    private List<Path> getPathFromFullyQualifiedName(String line)
+    private List<Path> getPathFromFullyQualifiedName(String line, int lineCounter)
     {
         line = line.replaceAll("\\.", "/");
         String qualifiedPath = basePath + "/" + substringBeforeLast(line, "/");
         String fileName = substringAfterLast(line, "/");
         File startPath = new File(qualifiedPath);
-        if(!startPath.exists())
+        if (!startPath.exists())
         {
-            log.error("Line "+lineCounter+": Path doesn't exist : " + qualifiedPath);
+            log.error("Line " + lineCounter + ": Path doesn't exist : " + qualifiedPath);
             return null;
         }
 
         return searchUtilities.search(startPath.toPath(), fileName, CLASS_FILE);
     }
 
-    private void searchAndPackRegularFile(String line) throws IOException
+    private void searchAndPrepareRegularFileForPacking(InputFileRecordDTO inputFileRecordDTO)
     {
-        List<Path> pathList = searchUtilities.search(basePath, line, ArtifactType.REGULAR_FILE);
-        scheduleForAddingInJar(line, pathList);
+        String line = inputFileRecordDTO.getLine();
+
+        List<Path> pathList = searchUtilities.search(basePath, line, REGULAR_FILE);
+        scheduleForAddingInJar(line, inputFileRecordDTO.getLineCounter(), pathList);
     }
 
-    private void scheduleForAddingInJar(String line, List<Path> pathList)
+    private void scheduleForAddingInJar(String line, int lineCounter, List<Path> pathList)
     {
         if (!isNotEmpty(pathList))
         {
@@ -322,44 +290,44 @@ public class CreateHF
         else
         {
             log.debug("Line " + lineCounter + ": File: " + line + " Found below records:");
-            List<JarRecord> jarRecords = Optional.ofNullable(moduleJarRecordsMap.get(modulePath)).orElse(new ArrayList<>());
+            List<JarRecordDTO> jarRecordDTOS = Optional.ofNullable(moduleJarRecordsMap.get(modulePath)).orElse(new ArrayList<>());
 
-            pathList.stream().forEach(path -> {
-                JarRecord jarRecord = prepareJarRecord(path);
-                log.debug(jarRecord);
-                jarRecords.add(jarRecord);
-            });
+            pathList.forEach(path ->
+                             {
+                                 JarRecordDTO jarRecordDTO = prepareJarRecord(path);
+                                 log.debug(jarRecordDTO);
+                                 jarRecordDTOS.add(jarRecordDTO);
+                             });
 
-            moduleJarRecordsMap.put(modulePath, jarRecords);
+            moduleJarRecordsMap.put(modulePath, jarRecordDTOS);
         }
     }
 
-    private JarRecord prepareJarRecord(Path path)
+    private JarRecordDTO prepareJarRecord(Path path)
     {
-        JarRecord jarRecord = new JarRecord();
-        jarRecord.setSourceFile(path.toFile());
-        jarRecord.setFilePathWithinJar(basePath.relativize(path).toString());
-        return jarRecord;
+        JarRecordDTO jarRecordDTO = new JarRecordDTO();
+        jarRecordDTO.setSourceFile(path.toFile());
+        jarRecordDTO.setFilePathWithinJar(basePath.relativize(path).toString());
+        return jarRecordDTO;
     }
 
     private void packJars() throws IOException
     {
         for (Path localModulePath : moduleJarRecordsMap.keySet())
         {
-            List<JarRecord> jarRecords = moduleJarRecordsMap.get(localModulePath);
-            if (isNotEmpty(jarRecords))
+            List<JarRecordDTO> jarRecordDTOS = moduleJarRecordsMap.get(localModulePath);
+            if (isNotEmpty(jarRecordDTOS))
             {
                 String jarPath = localModulePath.toString() + "\\" + localModulePath.getFileName() + "_" + simpleDateFormat
                         .format(currentTimeMillis()) + ".jar";
-                moduleJarMap.put(localModulePath, jarUtilities.createJar(jarPath, jarRecords));
+                moduleJarMap.put(localModulePath, jarUtilities.createJar(jarPath, jarRecordDTOS));
             }
         }
     }
 
     private void printJarPaths()
     {
-        if(moduleJarMap.keySet().size() == 0)
-            return;
+        if (moduleJarMap.keySet().size() == 0) { return; }
 
         log.info("Jar files created at:");
         for (Path path : moduleJarMap.keySet())
@@ -379,8 +347,7 @@ public class CreateHF
         }
         catch (IOException e)
         {
-            if(debugMode)
-                e.printStackTrace();
+            if (debugMode) { e.printStackTrace(); }
             log.error("Error creating zip file : " + e.getMessage());
         }
         log.info("Zip file created at: " + zipPath);

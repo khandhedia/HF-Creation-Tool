@@ -7,6 +7,6 @@ public enum ArtifactType
 {
     CLASS_FILE,
     REGULAR_FILE,
-    DIRECTORY;
+    DIRECTORY
 
 }
