@@ -11,5 +11,6 @@ public enum InputRecordType
     MODULE,
     BASEPACKAGE,
     REGULARFILE,
-    CLASSFILE
+    CLASSFILE,
+    ZIP
 }

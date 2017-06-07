@@ -3,6 +3,7 @@ package com.rnd.hftool.application;
 import com.rnd.hftool.dto.InputFileDTO;
 import com.rnd.hftool.dto.InputFileRecordDTO;
 import com.rnd.hftool.dto.JarRecordDTO;
+import com.rnd.hftool.dto.ZipRecordDTO;
 import com.rnd.hftool.enums.InputRecordType;
 import com.rnd.hftool.utilities.JarUtilities;
 import com.rnd.hftool.utilities.SearchUtilities;
@@ -31,10 +32,7 @@ import static com.rnd.hftool.enums.InputRecordType.ERRONEOUS;
 import static java.lang.System.currentTimeMillis;
 import static org.apache.commons.collections.CollectionUtils.isEmpty;
 import static org.apache.commons.collections.CollectionUtils.isNotEmpty;
-import static org.apache.commons.lang3.StringUtils.contains;
-import static org.apache.commons.lang3.StringUtils.endsWithIgnoreCase;
-import static org.apache.commons.lang3.StringUtils.substringAfterLast;
-import static org.apache.commons.lang3.StringUtils.substringBeforeLast;
+import static org.apache.commons.lang3.StringUtils.*;
 import static org.apache.log4j.Logger.getLogger;
 
 /**
@@ -54,6 +52,7 @@ public class CreateHF
     private SearchUtilities searchUtilities;
     private SimpleDateFormat simpleDateFormat;
     private final boolean debugMode;
+    private String zipPrefixPath;
 
     public CreateHF(boolean debugMode, Path currentPath)
     {
@@ -62,6 +61,7 @@ public class CreateHF
         this.componentPath = currentPath;
         this.modulePath = currentPath;
         this.basePath = currentPath;
+        this.zipPrefixPath="";
     }
 
     public void createHF(InputFileDTO inputFileDTO) throws IOException
@@ -86,7 +86,8 @@ public class CreateHF
             process(inputFileDTO);
             packJars();
             printJarPaths();
-            createZip();
+            zipJars();
+            createSingleZip();
         }
         catch (RuntimeException e)
         {
@@ -152,6 +153,9 @@ public class CreateHF
                 break;
             case CLASSFILE:
                 searchAndPrepareClassFileForPacking(inputFileRecordDTO);
+                break;
+            case ZIP:
+                setZipPrefixPath(inputFileRecordDTO);
                 break;
         }
     }
@@ -311,6 +315,19 @@ public class CreateHF
         return jarRecordDTO;
     }
 
+    private void setZipPrefixPath(InputFileRecordDTO inputFileRecordDTO) {
+
+        String localZipPrefixPath = inputFileRecordDTO.getValue();
+
+        if (StringUtils.isEmpty(localZipPrefixPath))
+            return;
+
+        if (endsWith(localZipPrefixPath, "\\") || endsWith(localZipPrefixPath, "/"))
+            this.zipPrefixPath = localZipPrefixPath;
+        else
+            this.zipPrefixPath = localZipPrefixPath + "/";
+    }
+
     private void packJars() throws IOException
     {
         for (Path localModulePath : moduleJarRecordsMap.keySet())
@@ -334,23 +351,60 @@ public class CreateHF
         { log.info(moduleJarMap.get(path)); }
     }
 
-    private void createZip()
+    private void zipJars()
     {
-        List<String> jarPaths = moduleJarMap.keySet().stream().map(path -> moduleJarMap.get(path).toPath().toString()).collect(Collectors.toList());
+        List<File> jarFiles = moduleJarMap.keySet().stream().map(path -> moduleJarMap.get(path)).collect(Collectors.toList());
 
-        if (isEmpty(jarPaths)) { return; }
+        List<ZipRecordDTO> zipRecordDTOS = new ArrayList<>();
+        jarFiles.forEach(jarFile -> zipRecordDTOS.add(new ZipRecordDTO(jarFile, jarFile.getName())));
+
+        if (isEmpty(jarFiles)) { return; }
 
         String zipPath = currentPath.toString() + "\\Hotfix_" + simpleDateFormat.format(currentTimeMillis()) + ".zip";
         try
         {
-            jarUtilities.compressFilesToZip(jarPaths, zipPath);
+            jarUtilities.compressFilesToZip(zipRecordDTOS, zipPath);
         }
         catch (IOException e)
         {
             if (debugMode) { e.printStackTrace(); }
-            log.error("Error creating zip file : " + e.getMessage());
+            log.error("Error creating zip file of jars: " + e.getMessage());
         }
-        log.info("Zip file created at: " + zipPath);
+        log.info("Zip file of jars created at: " + zipPath);
+    }
+
+    private void createSingleZip()
+    {
+
+        if(StringUtils.isEmpty(zipPrefixPath))
+            return;
+
+        List<ZipRecordDTO> zipRecordDTOS = new ArrayList<>();
+
+        moduleJarRecordsMap.keySet().stream().forEach(path -> zipRecordDTOS.addAll(convertToZipRecordDTOS(moduleJarRecordsMap.get(path), zipPrefixPath)));
+
+        String zipPath = currentPath.toString() + "\\SingleZip_" + simpleDateFormat.format(currentTimeMillis()) + ".zip";
+
+        try
+        {
+            jarUtilities.compressFilesToZip(zipRecordDTOS, zipPath);
+        } catch (IOException e)
+        {
+            if (debugMode)
+                e.printStackTrace();
+            log.error("Error creating single zip file : " + e.getMessage());
+        }
+        log.info("Single Zip file created at: " + zipPath);
+
+
+    }
+
+    private List<ZipRecordDTO> convertToZipRecordDTOS(List<JarRecordDTO> jarRecordDTOS, String zipPrefixPath)
+    {
+
+        List<ZipRecordDTO> zipRecordDTOS = new ArrayList<>();
+        jarRecordDTOS.forEach(jarRecordDTO -> zipRecordDTOS.add(new ZipRecordDTO(jarRecordDTO.getSourceFile(), zipPrefixPath+jarRecordDTO.getFilePathWithinJar())));
+        return zipRecordDTOS;
     }
 
     private String quote(String aText)

@@ -14,13 +14,7 @@ import static com.rnd.hftool.enums.FileTokens.TOKEN_BASE;
 import static com.rnd.hftool.enums.FileTokens.TOKEN_COMPONENT;
 import static com.rnd.hftool.enums.FileTokens.TOKEN_MODULE;
 import static com.rnd.hftool.enums.FileTokens.createToken;
-import static com.rnd.hftool.enums.InputRecordType.BASEPACKAGE;
-import static com.rnd.hftool.enums.InputRecordType.BLANK;
-import static com.rnd.hftool.enums.InputRecordType.CLASSFILE;
-import static com.rnd.hftool.enums.InputRecordType.COMPONENT;
-import static com.rnd.hftool.enums.InputRecordType.ERRONEOUS;
-import static com.rnd.hftool.enums.InputRecordType.MODULE;
-import static com.rnd.hftool.enums.InputRecordType.REGULARFILE;
+import static com.rnd.hftool.enums.InputRecordType.*;
 import static java.lang.System.currentTimeMillis;
 import static org.apache.commons.lang3.StringUtils.contains;
 import static org.apache.commons.lang3.StringUtils.endsWithIgnoreCase;
@@ -162,6 +156,10 @@ public class TextInputFileParser
                 case TOKEN_BASE:
                     log.debug("Line " + lineCounter + ": Base Package.");
                     inputFileRecordDTO.setInputRecordType(BASEPACKAGE);
+                    break;
+                case TOKEN_ZIP:
+                    log.debug("Line " + lineCounter + ": Zip.");
+                    inputFileRecordDTO.setInputRecordType(ZIP);
                     break;
                 case UNKNOWN:
                 default:

@@ -8,7 +8,9 @@ public enum FileTokens
     TOKEN_MODULE("Module"),
     TOKEN_BASE("Base"),
     TOKEN_COMPONENT("Component"),
+    TOKEN_ZIP("Zip"),
     UNKNOWN("Unknown");
+
 
     String token;
 
@@ -27,6 +29,7 @@ public enum FileTokens
         if (token.equalsIgnoreCase("module")) { return TOKEN_MODULE; }
         else if (token.equalsIgnoreCase("base")) { return TOKEN_BASE; }
         else if (token.equalsIgnoreCase("component")) { return TOKEN_COMPONENT; }
+        else if (token.equalsIgnoreCase("zip")) { return TOKEN_ZIP; }
         else { return UNKNOWN; }
     }
 

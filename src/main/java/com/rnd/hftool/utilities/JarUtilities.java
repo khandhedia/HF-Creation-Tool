@@ -1,6 +1,7 @@
 package com.rnd.hftool.utilities;
 
 import com.rnd.hftool.dto.JarRecordDTO;
+import com.rnd.hftool.dto.ZipRecordDTO;
 import org.apache.log4j.Logger;
 
 import java.io.BufferedInputStream;
@@ -98,20 +99,22 @@ public class JarUtilities
         }
     }
 
-    public void compressFilesToZip(List<String> filesList, String zipFilePath) throws IOException
+    public void compressFilesToZip(List<ZipRecordDTO> zipRecordDTOS, String zipFilePath) throws IOException
     {
         byte[] buffer = new byte[1024];
         FileOutputStream fos = new FileOutputStream(zipFilePath);
         ZipOutputStream zos = new ZipOutputStream(fos);
 
-        filesList.forEach(file -> {
+        zipRecordDTOS.forEach(zipRecordDTO -> {
             try
             {
-                File srcFile = new File(file);
+                File srcFile = zipRecordDTO.getSourceFile();
+                String name = zipRecordDTO.getFilePathWithinZip();
+
                 FileInputStream fis = new FileInputStream(srcFile);
 
                 // begin writing a new ZIP entry, positions the stream to the start of the entry data
-                zos.putNextEntry(new ZipEntry(srcFile.getName()));
+                zos.putNextEntry(new ZipEntry(name));
 
                 int length;
 
