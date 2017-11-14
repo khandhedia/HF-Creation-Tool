@@ -39,7 +39,7 @@ Contents:
     lesser is the content to be put into the inputfile.txt, as well as,
     lesser is the time to prepare the hotfix.
 
-3. inputfile can use following tokens: component, module or base.
+3. inputfile can use following tokens: component, module, base or zip.
 
     Example,
 
@@ -48,6 +48,10 @@ Contents:
     base=base_directory
 
     These tokens help setting the search scope for the files to be packed.
+
+    zip=applications/NetCracker.ear/APP-INF/classes
+
+    This token provides the prefix path to the artifact packaging for creating Single Hotfix zip.
 
 4. inputfile contains individual information on every line, and is processed from line 1 onwards.
 
@@ -71,6 +75,15 @@ Contents:
 11. To provide more flexibility, the tool can be placed at any physical location and the "Location of HF Tool:" can be passed as the system property in .bat file.
   -Dcurrent.path=The fully qualified path of the file in Unix Format (using / delimiter) or Windows Format (using \\ delimiter)
   If this system property is not specified, the current path is considered as the location of the physical location of the tool itself.
+
+12. To provide a possibility to create an easy deliverable hotfix, as per the NC environment directory structure, Single Zip concept is introduced.
+    This will ensure that hotfix zip will contain the artifacts prefixed by a common path for all the artifacts.
+
+    Example,
+
+    In NC, the hotifx for classes is deployed at <HOME>/applications/NetCracker.ear/APP-INF/classes/.
+    Hence, the single zip will pack all the artifacts prefixed with this path.
+    This will allow the hotfix deployment team to just copy the single hotfix zip at <HOME> location and unzip such that application folder from zip is merged with one present on server.
 
 ************************************* Example configuration ****************************************
 

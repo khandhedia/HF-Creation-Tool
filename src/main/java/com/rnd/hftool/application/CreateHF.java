@@ -311,7 +311,7 @@ public class CreateHF
     {
         JarRecordDTO jarRecordDTO = new JarRecordDTO();
         jarRecordDTO.setSourceFile(path.toFile());
-        jarRecordDTO.setFilePathWithinJar(basePath.relativize(path).toString());
+        jarRecordDTO.setFilePathWithinJar(replace(basePath.relativize(path).toString(), "\\", "/"));
         return jarRecordDTO;
     }
 
